@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ ap_ssid }} — настройка Wi-Fi</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--fg:#e2e8f0;--muted:#94a3b8;--acc:#38bdf8;--ok:#4ade80;--err:#f87171}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;padding:1rem}
+.wrap{max-width:30rem;margin:0 auto}
+h1{font-size:1.25rem}
+.sub{color:var(--muted);font-size:.85rem;margin:.25rem 0 1rem}
+.banner{border-radius:.6rem;padding:.75rem 1rem;margin-bottom:1rem;font-size:.9rem;display:none}
+.banner.show{display:block}
+.banner.busy{background:#1e3a5f;color:#bae6fd}
+.banner.ok{background:#14532d;color:#bbf7d0}
+.banner.fail{background:#7f1d1d;color:#fecaca}
+.card{background:var(--card);border-radius:.8rem;padding:1rem;margin-bottom:1rem}
+.row{display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem}
+.net{display:flex;align-items:center;gap:.75rem;padding:.7rem .5rem;border-radius:.5rem;cursor:pointer}
+.net:hover{background:#334155}
+.sig{display:flex;gap:2px;align-items:flex-end;height:14px;width:16px;flex:none}
+.sig i{width:3px;background:#475569;border-radius:1px;display:block}
+.sig i.on{background:var(--fg)}
+.sig i:nth-child(1){height:4px}.sig i:nth-child(2){height:7px}
+.sig i:nth-child(3){height:10px}.sig i:nth-child(4){height:14px}
+.meta{flex:1;min-width:0}
+.ssid{font-size:.95rem;word-break:break-all}
+.sec{color:var(--muted);font-size:.75rem}
+input{width:100%;padding:.6rem .7rem;border-radius:.5rem;border:1px solid #475569;background:#0f172a;color:var(--fg);font-size:1rem;margin:.4rem 0}
+button{padding:.6rem 1.1rem;border:0;border-radius:.5rem;background:var(--acc);color:#0f172a;font-weight:600;font-size:.95rem;cursor:pointer}
+button.ghost{background:transparent;color:var(--muted);padding:.3rem .5rem}
+.hidden{display:none}
+.hint{color:var(--muted);font-size:.8rem;margin-top:.5rem}
+a{color:var(--acc)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Настройка Wi-Fi</h1>
+  <div class="sub">{{ ap_ssid }} &middot; {{ ap_ip }}</div>
+  <div id="banner" class="banner"></div>
+  <div class="card">
+    <div class="row">
+      <strong>Доступные сети</strong>
+      <button class="ghost" id="refresh">Обновить</button>
+    </div>
+    <div id="nets"><div class="hint">Сканирование…</div></div>
+    <div class="hint"><a href="#" id="manualToggle">Подключиться к скрытой сети</a></div>
+    <form id="manualForm" class="hidden">
+      <input id="mSsid" placeholder="Имя сети (SSID)" autocomplete="off">
+      <input id="mPass" type="password" placeholder="Пароль (если сеть защищена)">
+      <button type="submit">Подключиться</button>
+    </form>
+  </div>
+  <div class="card hidden" id="dialog">
+    <div class="row">
+      <strong id="dSsid"></strong>
+      <button type="button" class="ghost" id="dCancel">Отмена</button>
+    </div>
+    <form id="dForm">
+      <input id="dPass" type="password" placeholder="Пароль">
+      <button type="submit">Подключиться</button>
+    </form>
+  </div>
+</div>
+<script>
+var $=function(i){return document.getElementById(i)};
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+var busy=false, lastNets=[];
+function bars(dbm){var n=dbm>=-55?4:dbm>=-67?3:dbm>=-75?2:1,h='<span class="sig">',i;
+  for(i=1;i<=4;i++)h+='<i class="'+(i<=n?'on':'')+'"></i>';return h+'</span>'}
+function banner(text,cls){var b=$('banner');
+  if(!text){b.className='banner';b.textContent='';return}
+  b.className='banner show '+cls;b.textContent=text}
+function jget(u){return fetch(u,{cache:'no-store'}).then(function(r){
+  if(!r.ok)throw new Error(r.status);return r.json()})}
+function loadNets(){
+  if(busy)return;
+  jget('/api/networks').then(function(d){
+    lastNets=d.networks;var el=$('nets');
+    if(!d.networks.length){el.innerHTML='<div class="hint">Сети не найдены — нажмите «Обновить»</div>';return}
+    var html=d.networks.map(function(n,i){
+      var name=n.ssid?esc(n.ssid):'<i>скрытая сеть</i>';
+      return '<div class="net" data-i="'+i+'">'+bars(n.signal)+
+        '<div class="meta"><div class="ssid">'+name+'</div>'+
+        '<div class="sec">'+esc(n.security)+' &middot; '+n.signal+' dBm</div></div></div>'}).join('');
+    el.innerHTML=html;
+    el.querySelectorAll('.net').forEach(function(e){
+      e.onclick=function(){pick(lastNets[+e.dataset.i])}});
+  }).catch(function(){
+    $('nets').innerHTML='<div class="hint">Нет связи с точкой доступа — повтор через несколько секунд…</div>'});
+}
+function pick(n){
+  if(!n.ssid){$('manualForm').classList.remove('hidden');$('mSsid').focus();return}
+  $('dialog').classList.remove('hidden');
+  $('dSsid').textContent=n.ssid;
+  $('dPass').value='';
+  $('dPass').placeholder=n.security==='Open'?'Сеть открыта — пароль не нужен':'Пароль';
+  $('dPass').focus();
+}
+$('dCancel').onclick=function(){$('dialog').classList.add('hidden')};
+$('dForm').onsubmit=function(e){e.preventDefault();connect($('dSsid').textContent,$('dPass').value)};
+$('manualForm').onsubmit=function(e){e.preventDefault();connect($('mSsid').value.trim(),$('mPass').value)};
+$('manualToggle').onclick=function(e){e.preventDefault();$('manualForm').classList.toggle('hidden');$('mSsid').focus()};
+$('refresh').onclick=function(){busy=false;loadNets()};
+function connect(ssid,pass){
+  if(!ssid||busy)return;busy=true;
+  fetch('/api/connect',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ssid:ssid,password:pass})}).then(function(r){
+    if(r.ok){banner('Подключаюсь к «'+ssid+'»… Точка доступа временно пропадёт. Если всё пройдёт успешно — просто подключитесь к вашей обычной Wi-Fi сети.','busy');return}
+    return r.json().catch(function(){}).then(function(d){
+      banner((d&&d.error)||'Ошибка запроса','fail');busy=false});
+  }).catch(function(){banner('Не удалось отправить запрос','fail');busy=false});
+}
+function poll(){
+  jget('/api/status').then(function(d){
+    var a=d.attempt;
+    if(a&&a.result==='fail'){banner('Не удалось подключиться к «'+a.ssid+'»: '+a.reason,'fail');busy=false}
+    else if(a&&a.result==='ok'){banner('Успешно подключено к «'+a.ssid+'». Эту страницу можно закрыть.','ok');busy=false}
+  }).catch(function(){if(busy)banner('Подключаюсь… ожидание возврата точки доступа','busy')});
+}
+loadNets();poll();setInterval(poll,3000);setInterval(loadNets,15000);
+</script>
+</body>
+</html>

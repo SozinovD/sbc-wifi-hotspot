@@ -1,0 +1,14 @@
+[Unit]
+Description=SBC Wi-Fi hotspot and provisioning portal
+After=network-pre.target
+Wants=network-pre.target
+
+[Service]
+EnvironmentFile=/etc/sbc-wifi-hotspot.env
+WorkingDirectory=/opt/sbc-wifi-hotspot
+ExecStart=/opt/sbc-wifi-hotspot/venv/bin/python -m hotspot
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

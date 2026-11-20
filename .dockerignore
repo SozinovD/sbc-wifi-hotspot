@@ -1,0 +1,9 @@
+.git
+.github
+.env
+scripts/
+deploy/
+README.md
+__pycache__/
+*.pyc
+.venv
